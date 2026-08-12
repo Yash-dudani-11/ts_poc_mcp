@@ -1,5 +1,6 @@
 from typing import Optional
 from mcp.server import MCPServer
+from mcp.server.streamable_http import TransportSecuritySettings
 from schema import CreateProductResult, Product
 
 mcp = MCPServer("Product CRUD MCP Server")
@@ -169,4 +170,9 @@ def delete_product(product_id: int) -> dict:
 #         port=8000,
 #     )
 
-app = mcp.streamable_http_app()
+app = mcp.streamable_http_app(
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=["ts-poc-mcp-zhrk.vercel.app", "localhost"],
+        allowed_origins=["https://ts-poc-mcp-zhrk.vercel.app"],
+    )
+)
