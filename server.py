@@ -13,18 +13,12 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 def create_product(
     name: str, 
     price: float, 
-    description: Optional[str] = None
+    product_description: Optional[str] = None
 ) -> CreateProductResult:
     """
-    Create a new product.
+    Create a new product in the product database.
 
-    Args:
-        name: Name of the product.
-        price: Price of the product.
-        description: Optional description of the product.
-
-    Returns:
-        The newly created product.
+    Use this tool when the user asks to add or create a product.
     """
     
     with psycopg.connect(DATABASE_URL) as conn:
@@ -35,7 +29,7 @@ def create_product(
                 VALUES (%s, %s, %s)
                 RETURNING id, name, description, price
                 """,
-                (name, description, price),
+                (name, product_description, price),
             )
 
             row = cur.fetchone()
@@ -57,13 +51,10 @@ def create_product(
 @mcp.tool()
 def get_product(product_id: int) -> dict:
     """
-    Get a product by its ID.
-    
-    Args:
-        product_id: Unique ID of the product.
+    Retrieve one product by its unique product ID.
 
-    Returns:
-        The matching product if it exists.
+    Use this tool when the user asks for details about
+    a specific product and provides its product ID.
     """
     
     with psycopg.connect(DATABASE_URL) as conn:
@@ -99,7 +90,16 @@ def get_product(product_id: int) -> dict:
 @mcp.tool()
 def list_products() -> dict:
     """
-    Return all available products.
+    List all products stored in the product database.
+
+    Use this tool when the user asks to view, show, retrieve,
+    or list all available products.
+
+    Returns:
+        A result containing:
+        - success: Whether the operation succeeded.
+        - count: Number of products returned.
+        - products: List of all products.
     """
 
     with psycopg.connect(DATABASE_URL) as conn:
@@ -136,7 +136,7 @@ def update_product(
     product_id: int,
     name: Optional[str] = None,
     price: Optional[float] = None,
-    description: Optional[str] = None,
+    product_description: Optional[str] = None,
 ) -> dict:
     """
     Update an existing product.
@@ -147,7 +147,7 @@ def update_product(
         product_id: Unique ID of the product.
         name: New product name.
         price: New product price.
-        description: New product description.
+        product_description: New product description.
 
     Returns:
         The updated product.
@@ -175,7 +175,7 @@ def update_product(
 
             new_name = name if name is not None else existing[1]
             new_description = (
-                description if description is not None else existing[2]
+                product_description if product_description is not None else existing[2]
             )
             new_price = price if price is not None else existing[3]
 
