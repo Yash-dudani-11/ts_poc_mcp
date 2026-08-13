@@ -2,7 +2,7 @@ import os
 import psycopg
 from typing import Optional
 from mcp.server import MCPServer
-from mcp.server.streamable_http import TransportSecuritySettings
+from mcp.server.transport_security import TransportSecuritySettings
 from schema import CreateProductResult, Product
 
 mcp = MCPServer("Product CRUD MCP Server")
