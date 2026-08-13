@@ -31,11 +31,11 @@ def create_product(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO products (name, price, description)
+                INSERT INTO products (name, description, price)
                 VALUES (%s, %s, %s)
                 RETURNING id, name, description, price
                 """,
-                (name, price, description),
+                (name, description, price),
             )
 
             row = cur.fetchone()
