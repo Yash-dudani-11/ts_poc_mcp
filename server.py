@@ -1,3 +1,5 @@
+import os
+import psycopg
 from typing import Optional
 from mcp.server import MCPServer
 from mcp.server.streamable_http import TransportSecuritySettings
@@ -5,8 +7,7 @@ from schema import CreateProductResult, Product
 
 mcp = MCPServer("Product CRUD MCP Server")
 
-products = {}
-next_id = 1
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 @mcp.tool()
 def create_product(
@@ -26,22 +27,30 @@ def create_product(
         The newly created product.
     """
     
-    global next_id
-    
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO products (name, price, description)
+                VALUES (%s, %s, %s)
+                RETURNING id, name, description, price
+                """,
+                (name, price, description),
+            )
+
+            row = cur.fetchone()
+
     product = Product(
-        id=next_id,
-        name=name,
-        description=description,
-        price=price
+        id=row[0],
+        name=row[1],
+        description=row[2],
+        price=row[3],
     )
-    
-    products[next_id] = product
-    next_id += 1
 
     return CreateProductResult(
         success=True,
         message="Product created successfully.",
-        product=product
+        product=product,
     )
 
 
@@ -57,17 +66,33 @@ def get_product(product_id: int) -> dict:
         The matching product if it exists.
     """
     
-    product = products.get(product_id)
-    
-    if product is None:
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, description, price
+                FROM products
+                WHERE id = %s
+                """,
+                (product_id,),
+            )
+
+            row = cur.fetchone()
+
+    if row is None:
         return {
             "success": False,
-            "message": f"Product {product_id} was not found"
+            "message": f"Product {product_id} was not found.",
         }
-    
+
     return {
         "success": True,
-        "product": product
+        "product": {
+            "id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "price": row[3],
+        },
     }
 
 
@@ -75,15 +100,34 @@ def get_product(product_id: int) -> dict:
 def list_products() -> dict:
     """
     Return all available products.
-
-    Returns:
-        All products currently stored by the MCP server.
     """
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, description, price
+                FROM products
+                ORDER BY id
+                """
+            )
+
+            rows = cur.fetchall()
+
+    products = [
+        {
+            "id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "price": row[3],
+        }
+        for row in rows
+    ]
 
     return {
         "success": True,
         "count": len(products),
-        "products": list(products.values()),
+        "products": products,
     }
 
 
@@ -109,27 +153,60 @@ def update_product(
         The updated product.
     """
 
-    product = products.get(product_id)
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
 
-    if product is None:
-        return {
-            "success": False,
-            "message": f"Product {product_id} was not found.",
-        }
+            cur.execute(
+                """
+                SELECT id, name, description, price
+                FROM products
+                WHERE id = %s
+                """,
+                (product_id,),
+            )
 
-    if name is not None:
-        product.name = name
+            existing = cur.fetchone()
 
-    if price is not None:
-        product.price = price
+            if existing is None:
+                return {
+                    "success": False,
+                    "message": f"Product {product_id} was not found.",
+                }
 
-    if description is not None:
-        product.description = description
+            new_name = name if name is not None else existing[1]
+            new_description = (
+                description if description is not None else existing[2]
+            )
+            new_price = price if price is not None else existing[3]
+
+            cur.execute(
+                """
+                UPDATE products
+                SET name = %s,
+                    description = %s,
+                    price = %s
+                WHERE id = %s
+                RETURNING id, name, description, price
+                """,
+                (
+                    new_name,
+                    new_description,
+                    new_price,
+                    product_id,
+                ),
+            )
+
+            row = cur.fetchone()
 
     return {
         "success": True,
         "message": "Product updated successfully.",
-        "product": product,
+        "product": {
+            "id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "price": row[3],
+        },
     }
 
 
@@ -145,9 +222,20 @@ def delete_product(product_id: int) -> dict:
         Confirmation that the product was deleted.
     """
 
-    product = products.pop(product_id, None)
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM products
+                WHERE id = %s
+                RETURNING id, name, description, price
+                """,
+                (product_id,),
+            )
 
-    if product is None:
+            row = cur.fetchone()
+
+    if row is None:
         return {
             "success": False,
             "message": f"Product {product_id} was not found.",
@@ -156,23 +244,31 @@ def delete_product(product_id: int) -> dict:
     return {
         "success": True,
         "message": "Product deleted successfully.",
-        "deleted_product": product,
+        "deleted_product": {
+            "id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "price": row[3],
+        },
     }
 
 # ---------------------------------------------------------------------------
 # Start MCP server
 # ---------------------------------------------------------------------------
 
-# if __name__ == "__main__":
-#     mcp.run(
-#         "streamable-http",
-#         host="0.0.0.0",
-#         port=8000,
-#     )
-
 app = mcp.streamable_http_app(
     transport_security=TransportSecuritySettings(
-        allowed_hosts=["ts-poc-mcp-zhrk.vercel.app", "localhost"],
-        allowed_origins=["https://ts-poc-mcp-zhrk.vercel.app"],
+        allowed_hosts=[
+            "ts-poc-mcp-zhrk.vercel.app",
+            "localhost",
+            "localhost:8000",
+            "127.0.0.1",
+            "127.0.0.1:8000",
+        ],
+        allowed_origins=[
+            "https://ts-poc-mcp-zhrk.vercel.app",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ],
     )
 )
